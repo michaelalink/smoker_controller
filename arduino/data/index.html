@@ -1,0 +1,707 @@
+<!doctype html>
+<html>
+<head>
+	<title>Smoker Controller</title>
+	<script src="js/chart.js"></script>
+	<script src="js/luxon.js"></script>
+	<script src="js/chartjs-adapter-luxon.js"></script>
+	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.1/css/all.css" crossorigin="anonymous">
+	<link rel="icon" href="data:,">
+	<style>
+	canvas{
+		-moz-user-select: none;
+		-webkit-user-select: none;
+		-ms-user-select: none;
+	}
+	html {font-family: Arial; display: inline-block; text-align: center;}
+	p,label { font-size: 1.2rem;}
+	body {  margin: 0;}
+	.topnav { overflow: hidden; background-color: #2b8cbe; color: white; font-size: 1rem; border-bottom:1px solid #216c91;}
+	.navbar {  }
+	.navul { list-style-type: none; margin: 0; padding: 0; overflow: hidden; background-color: #2b8cbe; }
+	.navli { float: left; border-right:1px solid #216c91; display: block; color: white; text-align: center; padding: 14px 16px; text-decoration: none;}
+	.navli:hover { background-color: #216c91; cursor: pointer; }
+	.content {max-width: 90%; margin: 0 auto; padding: 20px; }
+	.card { cursor: pointer; background-color: white; box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); }
+	.cardAlarm { box-shadow: 0px 0px 15px 10px red; }
+	.cards { display: grid; grid-gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+	.chart { padding: 10px; box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); }
+	.reading { color:#0; font-size: 2rem; }
+	.setpoint { color:#a0a0a0; }
+	.output { color:#a0a0a0; }
+	.mode {color:#a0a0a0;}
+	.modeAbnormal {color:#fff; background-color:#543005}
+	.description { color:#a0a0a0; }
+	.badPV { color:#ff0000; visibility:hidden; }
+	.faceplate { min-width: 300px; display: none; position: absolute; left: 50%; top: 10%; background-color:#ffffff; transform: translate(-50%, 5%); padding: 10px; box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); z-index: 9; }
+	.btn {padding: 12px 20px; border: none; background-color: #999999; color: #fff; cursor: pointer; width: 40%; margin-bottom: 15px; opacity: 0.8;}
+	.btn:hover {opacity: 1; background-color: #2b8cbe;}
+	.btnClicked {opacity: 1; background-color: #2b8cbe;}
+	.input {padding: 5px 5px; border-color: #6a6a6a; width: 40%; margin-bottom: 15px; }
+	.fpEntry { display: none; }
+	.switch { position: relative; display: inline-block; width: 35px; height: 18px; }
+	.switch input { opacity: 0; width: 0; height: 0; }
+	.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s; }
+	.slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 2px; bottom: 2px; background-color: white; -webkit-transition: .4s; transition: .4s; }
+	input:checked + .slider { background-color: #2b8cbe; }
+	input:focus + .slider { box-shadow: 0 0 1px #2b8cbe; }
+	input:checked + .slider:before { -webkit-transform: translateX(16px); -ms-transform: translateX(16px); transform: translateX(16px); }
+	.slider.round { border-radius: 34px; }
+	.slider.round:before { border-radius: 50%; }
+	.connError {min-height: 25%; min-width: 75%; display: none; position: fixed; left: 50%; top: 10%; background: rgba(255, 255, 255, 0.8); transform: translate(-50%, 5%); padding: 10px; box-shadow: 0px 0px 15px 10px red; z-index: 10;}
+	
+	</style>
+</head>
+
+<body>
+	<div class="topnav">
+		<h1>Smoker Controller</h1>
+	</div>
+	<div class="topnav">
+		<ul class="navul">
+			<li class="navli" onclick="document.getElementById('wifiFP').style.display = 'block';">Wifi</li>
+			<li class="navli" onclick="document.getElementById('tuningFP').style.display = 'block';">Tuning</li>
+			<!--<li class="navli">Alarms</li>-->
+			<li class="navli" onclick="document.getElementById('historyFP').style.display = 'block';">History</li>
+			<li class="navli" onclick="document.getElementById('diagFP').style.display = 'block';">Diagnostics</li>
+		</ul>
+	</div>
+	<div class="content">
+		<div class="cards">
+			<div id="card0" class="card" onclick="openPIDFaceplate()">
+				<p><i class="fas fa-fire" style="color:#ff6384;"></i> Pit Temperature</p>
+				<p><span class="reading"><span id="pitTempFault" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="pittemp">--</span> &deg;F</span></p>
+				<p class="setpoint">Setpoint: <span id="setpoint">%SP%</span> &deg;F</p>
+				<p class="description" id="pitTempFaultDesc"></p>
+				<p><span id="mode" class="mode">AUTO</span><span class="output">  Output: <span id="output">--</span> &percnt;</span></p>
+			</div>
+			<div id="card1" class="card" onclick="openProbeFP(1)">
+				<p><i class="fas fa-thermometer-half" style="color:#bae4bc;"></i> Probe 1 Temperature</p>
+				<p class="description" id="probe1Desc"></p>
+				<p><span class="reading"><span id="probe1Fault" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="probe1">--</span> &deg;F</span></p>
+				<p class="setpoint"><i id="probeTgtAlmI1" class="fas fa-bell"></i> Target: <span id="probe1Target">--</span> &deg;F</p>
+				<span id="probeTgtActP1"><p style="color:red;"><i class="fas fa-bell"></i> At Target</p></span>
+				<p class="description" id="probe1FaultDesc"></p>
+			</div>
+			<div id="card2" class="card" onclick="openProbeFP(2)">
+				<p><i class="fas fa-thermometer-half" style="color:#7bccc4;"></i> Probe 2 Temperature</p>
+				<p class="description" id="probe2Desc"></p>
+				<p><span class="reading"><span id="probe2Fault" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="probe2">--</span> &deg;F</span></p>
+				<p class="setpoint"><i id="probeTgtAlmI2" class="fas fa-bell"></i> Target: <span id="probe2Target">--</span> &deg;F</p>
+				<span id="probeTgtActP2"><p style="color:red;"><i class="fas fa-bell"></i> At Target</p></span>
+				<p class="description" id="probe2FaultDesc"></p>
+			</div>
+			<div id="card3" class="card" onclick="openProbeFP(3)">
+				<p><i class="fas fa-thermometer-half" style="color:#2b8cbe;"></i> Probe 3 Temperature</p>
+				<p class="description" id="probe3Desc"></p>
+				<p><span class="reading"><span id="probe3Fault" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="probe3">--</span> &deg;F</span></p>
+				<p class="setpoint"><i id="probeTgtAlmI3" class="fas fa-bell"></i> Target: <span id="probe3Target">--</span> &deg;F</p>
+				<span id="probeTgtActP3"><p style="color:red;"><i class="fas fa-bell"></i> At Target</p></span>
+				<p class="description" id="probe3FaultDesc"></p>
+			</div>
+		</div>
+		<!-- Pit Temperature FP -->
+		<div id="pidfaceplate" class="faceplate">
+			<p id="setpointFpDisp" class="setpoint" style="cursor: pointer;" onclick="openFpSp()">Setpoint: <span id="setpointFp">%SP%</span> &deg;F</p>
+			<p id="setpointFpEntry" class="fpEntry"><input class="input" id="setpointFpInput" type="text"> <button class="btn" onclick="setFpSetpoint()">Set</button> </p>
+			<p><span class="reading"><span id="pitTempFaultFp" class="badPV"><i class="fas fa-times-circle"></i></span> Current Value: <span id="pittempFp">%PV%</span> &deg;F</span></p>
+			<p class="description" id="pitTempFaultDescFp"></p>
+			<p id="outputFpDisp"  class="output" style="cursor: pointer;" onclick="openFpOut()"> Output: <span id="outputFp">%OUT%</span> &percnt;</p>
+			<p id="outputFpEntry" class="fpEntry"><input class="input" id="outputFpInput" type="text"> <button class="btn" onclick="setFpOutput()">Set</button> </p>
+			<p>
+			Target Mode: </br>
+			<button id="manBtmFp" type="button" class="btn" onclick="setModeMan()">Manual</button>
+			<button id="autoBtmFp" type="button" class="btn" onclick="setModeAuto()">Auto</button>
+			</br>
+			Actual Mode: <span id="modeFp" class="mode">AUTO</span></p>
+			
+			<p><label class="setpoint">Setpoint Deviation Alarm </label><label class="switch"><input id="setpointPValarm" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label></p>
+			<p><label class="setpoint">Lid Open Detection </label><label class="switch"><input id="lidOpenDetect" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label></p>
+			
+			<br>
+			<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+		</div>
+		<!-- Probe 1 FP -->
+		<div id="probe1faceplate" class="faceplate">
+			<h2>Probe 1</h2>
+			<p class="description" id="DescFpDispP1" style="cursor: pointer;" onclick="openProbeDesc(1)">--</p>
+			<p id="DescFpEntryP1" class="fpEntry"><input class="input" id="DescFpInputP1" type="text"> <button class="btn" onclick="setFpDescProbe(1)">Set</button> </p>
+			<label class="setpoint">Alarm at Target </label><label class="switch"><input id="probeTgtAlm1" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label>
+			<p id="probeTgtActFP1"><label class="setpoint">Acknowledge </label><label class="switch"><input id="probeTgtAck1" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label></p>
+			<p id="SpFpDispP1" class="setpoint" style="cursor: pointer;" onclick="openProbeSP(1)">Target: <span id="probe1TargetFP">N/A</span> &deg;F</p>
+			<p id="SpFpEntryP1" class="fpEntry"><input class="input" id="SpFpInputP1" type="text"> <button class="btn" onclick="setFpSpProbe(1)">Set</button> </p>
+			<p><span class="reading"><span id="probe1FaultFP" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="probe1FP">--</span> &deg;F</span></p>
+			<p class="description" id="probe1FaultDescFP"></p>
+
+			<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+		</div>
+		<!-- Probe 2 FP -->
+		<div id="probe2faceplate" class="faceplate">
+			<h2>Probe 2</h2>
+			<p class="description" id="DescFpDispP2" style="cursor: pointer;" onclick="openProbeDesc(2)">--</p>
+			<p id="DescFpEntryP2" class="fpEntry"><input class="input" id="DescFpInputP2" type="text"> <button class="btn" onclick="setFpDescProbe(2)">Set</button> </p>
+			<label class="setpoint">Alarm at Target </label><label class="switch"><input id="probeTgtAlm2" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label>
+			<p id="probeTgtActFP2"><label class="setpoint">Acknowledge </label><label class="switch"><input id="probeTgtAck2" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label></p>
+			<p id="SpFpDispP2" class="setpoint" style="cursor: pointer;" onclick="openProbeSP(2)">Target: <span id="probe2TargetFP">N/A</span> &deg;F</p>
+			<p id="SpFpEntryP2" class="fpEntry"><input class="input" id="SpFpInputP2" type="text"> <button class="btn" onclick="setFpSpProbe(2)">Set</button> </p>
+			<p><span class="reading"><span id="probe2FaultFP" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="probe2FP">--</span> &deg;F</span></p>
+			<p class="description" id="probe2FaultDescFP"></p>
+
+			<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+		</div>
+		<!-- Probe 3 FP -->
+		<div id="probe3faceplate" class="faceplate">
+			<h2>Probe 3</h2>
+			<p class="description" id="DescFpDispP3" style="cursor: pointer;" onclick="openProbeDesc(3)">--</p>
+			<p id="DescFpEntryP3" class="fpEntry"><input class="input" id="DescFpInputP3" type="text"> <button class="btn" onclick="setFpDescProbe(3)">Set</button> </p>
+			<label class="setpoint">Alarm at Target </label><label class="switch"><input id="probeTgtAlm3" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label>
+			<p id="probeTgtActFP3"><label class="setpoint">Acknowledge </label><label class="switch"><input id="probeTgtAck3" type="checkbox" onchange="writeCheckbox(this)"><span class="slider round"></span></label></p>
+			<p id="SpFpDispP3" class="setpoint" style="cursor: pointer;" onclick="openProbeSP(3)">Target: <span id="probe3TargetFP">N/A</span> &deg;F</p>
+			<p id="SpFpEntryP3" class="fpEntry"><input class="input" id="SpFpInputP3" type="text"> <button class="btn" onclick="setFpSpProbe(3)">Set</button> </p>
+			<p><span class="reading"><span id="probe3FaultFP" class="badPV"><i class="fas fa-times-circle"></i></span> <span id="probe3FP">--</span> &deg;F</span></p>
+			<p class="description" id="probe3FaultDescFP"></p>
+
+			<button type="button" class="btn cancel" onclick="closeForm()">Close</button>
+		</div>
+		<!-- WiFi Settings -->
+		<div id="wifiFP" class="faceplate" style="text-align:left;">
+			<h2>WiFi Settings</h2>
+			<h3>Wifi Client Settings</h3>
+			<label for="wifiClient">Enable </label><label class="switch"><input id="wifiClient" type="checkbox"><span class="slider round"></span></label><br><br>
+			<label for="clientSSID">SSID</label><br>
+			<input class="input" id="clientSSID" type="text"><br>
+			<label for="clientPWD">Password</label><br>
+			<input class="input" id="clientPWD" type="text"><br>
+			
+			<h3>WiFi Access Point Settings</h3>
+			<label for="wifiAP">Enable </label><label class="switch"><input id="wifiAP" type="checkbox"><span class="slider round"></span></label><br><br>
+			<label for="apSSID">SSID</label><br>
+			<input class="input" id="apSSID" type="text"><br>
+			<label for="apPWD">Password</label><br>
+			<input class="input" id="apPWD" type="text"><br>
+			
+			<button type="button" class="btn save" onclick="saveWifi()">Save</button>
+			<button type="button" class="btn cancel" onclick="document.getElementById('wifiFP').style.display = 'none';">Close</button>
+		</div>
+		<!-- Tuning Settings -->
+		<div id="tuningFP" class="faceplate" style="text-align: left;">
+			<h2>Tuning</h2>
+						
+			<h3>PID</h3>
+			<p id="pidDispP" class="setpoint" style="cursor: pointer;" onclick="openPid('P')">Proportional: <span id="pidTuneCVP">--</span> </p>
+			<p id="pidEntryP" class="fpEntry"><input class="input" id="pidTuneP" type="text"> <button class="btn" onclick="setpid('P')">Set</button> </p>
+			
+			<p id="pidDispI" class="setpoint" style="cursor: pointer;" onclick="openPid('I')">Intergral: <span id="pidTuneCVI">--</span> </p>
+			<p id="pidEntryI" class="fpEntry"><input class="input" id="pidTuneI" type="text"> <button class="btn" onclick="setpid('I')">Set</button> </p>
+			
+			<p id="pidDispD" class="setpoint" style="cursor: pointer;" onclick="openPid('D')">Derivative: <span id="pidTuneCVD">--</span> </p>
+			<p id="pidEntryD" class="fpEntry"><input class="input" id="pidTuneD" type="text"> <button class="btn" onclick="setpid('D')">Set</button> </p>
+			
+			<h3>Servo Setting</h3>
+			<label for="servoOut0">PID Output:</label><br>
+			<input class="input" id="servoIn0" type="text"> to <input class="input" id="servoIn100" type="text">&percnt;<br>
+			<label for="servoOut0">Servo Output:</label><br><em>in degrees</em><br>
+			<input class="input" id="servoOut0" type="text"> to <input class="input" id="servoOut100" type="text">&deg;<br>
+			<button type="button" class="btn save" onclick="saveLimits('servo')">Save Servo</button>
+
+			<h3>Fan Setting</h3>
+			<label for="servoOut0">PID Output:</label><br>
+			<input class="input" id="fanIn0" type="text"> to <input class="input" id="fanIn100" type="text">&percnt;<br>
+			<label for="servoOut0">Fan Output:</label><br>
+			<input class="input" id="fanOut0" type="text"> to <input class="input" id="fanOut100" type="text">&percnt;<br>
+			<button type="button" class="btn save" onclick="saveLimits('fan')">Save Fan</button>
+			
+			<h3>Pit Probe</h3>
+			<p title="Time to get to 67% of the new value" id="filtTimeDisp0" class="setpoint" style="cursor: pointer;" onclick="openFilterTime(0)">Filter Time: <span id="filterTimeCV0">--</span> Seconds</p>
+			<p id="filtTimeEntry0" class="fpEntry"><input class="input" id="filterTime0" type="text"> <button class="btn" onclick="setFilterTime(0)">Set</button> </p>
+			
+			<h3>Probe 1</h3>
+			<p id="filtTimeDisp1" class="setpoint" style="cursor: pointer;" onclick="openFilterTime(1)">Filter Time: <span id="filterTimeCV1">--</span> Seconds</p>
+			<p id="filtTimeEntry1" class="fpEntry"><input class="input" id="filterTime1" type="text"> <button class="btn" onclick="setFilterTime(1)">Set</button> </p>
+			
+			<h3>Probe 2</h3>
+			<p id="filtTimeDisp2" class="setpoint" style="cursor: pointer;" onclick="openFilterTime(2)">Filter Time: <span id="filterTimeCV2">--</span> Seconds</p>
+			<p id="filtTimeEntry2" class="fpEntry"><input class="input" id="filterTime2" type="text"> <button class="btn" onclick="setFilterTime(2)">Set</button> </p>
+			
+			<h3>Probe 3</h3>
+			<p id="filtTimeDisp3" class="setpoint" style="cursor: pointer;" onclick="openFilterTime(3)">Filter Time: <span id="filterTimeCV3">--</span> Seconds</p>
+			<p id="filtTimeEntry3" class="fpEntry"><input class="input" id="filterTime3" type="text"> <button class="btn" onclick="setFilterTime(3)">Set</button> </p>
+			
+			<h3>Lid Open Detection</h3>
+			<label for="lidOpnPctDeviation">Percent Deviation:</label><br>
+			<input class="input" id="lidOpnPctDeviation" type="text">% <button type="button" class="btn save" onclick="setLidOpnPctDev()">Set</button>
+			
+			<br>
+			<br>
+			<button type="button" class="btn cancel" onclick="document.getElementById('tuningFP').style.display = 'none';">Close</button>
+		</div>
+		<!-- History Settings -->
+		<div id="historyFP" class="faceplate" style="text-align:left;">
+			<h2>History Settings</h2>
+			<button type="button" class="btn save" onclick="clearHist()">Clear History</button><br>
+			<button type="button" class="btn" onclick="saveHistory()">Save</button>
+			<button type="button" class="btn cancel" onclick="document.getElementById('historyFP').style.display = 'none';">Close</button>
+		</div>
+		<!-- Diagnostics -->
+		<div id="diagFP" class="faceplate" style="text-align:left;">
+			<h2>Diagnostics</h2>
+			<p id="uptime" class="setpoint">Uptime: <span id="uptimeCV">--</span> Seconds</p>
+			<p id="timeStamp" class="setpoint">NTP Timestamp: <span id="timeStampCV">--</span> Seconds</p>
+			<p id="inputVolts" class="setpoint">Input Voltage: <span id="inputVoltsCV">--</span> Volts<br><em>This is not very accurate</em></p>
+			
+			<p class="setpoint">Pit Probe Deviation: <span id="probe0Deviation">--</span> %</p>
+			<p class="setpoint">Probe 1 Deviation: <span id="probe1Deviation">--</span> %</p>
+			<p class="setpoint">Probe 2 Deviation: <span id="probe2Deviation">--</span> %</p>
+			<p class="setpoint">Probe 3 Deviation: <span id="probe3Deviation">--</span> %</p>
+
+			<button type="button" class="btn cancel" onclick="document.getElementById('diagFP').style.display = 'none';">Close</button>
+		</div>
+		<!-- Connection Lost -->
+		<div id="connectionLost" class="connError" style="display:none;">
+			<h1>Connection Lost</h1>
+		</div>
+		<br>
+		<br>
+		<div class="chart">
+			<canvas id="canvas"></canvas>
+		</div>
+	</div>
+	<script>
+		var gateway = `ws://${window.location.hostname}/ws`;
+ gateway = `ws://smoker.link.nodeath.net/ws`;
+		var websocket;
+		var currentData;
+		var updateChartInterval = 5;
+		function initWebSocket() {
+			console.log('Trying to open a WebSocket connection...');
+			websocket = new WebSocket(gateway);
+			document.getElementById('connectionLost').style.display = "block";
+			websocket.onopen    = onOpen;
+			websocket.onclose   = onClose;
+			websocket.onmessage = onMessage;
+		}
+		function onOpen(event) {
+			console.log('Connection opened');
+			document.getElementById('connectionLost').style.display = "none";
+		}
+		function onClose(event) {
+			console.log('Connection closed');
+			document.getElementById('connectionLost').style.display = "block";
+			setTimeout(initWebSocket, 1000);
+		}
+		function onMessage(event) {
+		currentData = JSON.parse(event.data);
+			if(('update' in currentData) && (currentData['update'] == true)){
+				document.getElementById('uptimeCV').innerHTML = (currentData['millis']/1000).toFixed(3);
+				document.getElementById('inputVoltsCV').innerHTML = currentData['inputVolts'].toFixed(1);
+				document.getElementById('timeStampCV').innerHTML = currentData['timestamp'].toFixed(0);
+				
+				document.getElementById('setpoint').innerHTML = currentData['setpoint'].toFixed(1);
+				document.getElementById('setpointFp').innerHTML = currentData['setpoint'].toFixed(1);
+
+				document.getElementById('pittemp').innerHTML = currentData['pitTemp'].toFixed(1);
+				document.getElementById('pittempFp').innerHTML = currentData['pitTemp'].toFixed(1);
+				document.getElementById('probe0Deviation').innerHTML = currentData['probe0Deviation'].toFixed(3);
+				document.getElementById('output').innerHTML = currentData['output'].toFixed(1);
+				document.getElementById('outputFp').innerHTML = currentData['output'].toFixed(1);
+				document.getElementById('probe1').innerHTML = currentData['probe1'].toFixed(1);
+				document.getElementById('probe1FP').innerHTML = currentData['probe1'].toFixed(1);
+				document.getElementById('probe2').innerHTML = currentData['probe2'].toFixed(1);
+				document.getElementById('probe2FP').innerHTML = currentData['probe2'].toFixed(1);
+				document.getElementById('probe3').innerHTML = currentData['probe3'].toFixed(1);
+				document.getElementById('probe3FP').innerHTML = currentData['probe3'].toFixed(1);
+				
+				
+				for(var probe=1; probe<=3; probe++){
+					if(currentData['probe'+probe+'Desc'] != null && currentData['probe'+probe+'Desc'] != ""){
+						document.getElementById('probe'+probe+'Desc').innerHTML = currentData['probe'+probe+'Desc'];
+						document.getElementById('DescFpDispP'+probe).innerHTML = currentData['probe'+probe+'Desc'];
+					}
+					else{
+						document.getElementById('DescFpDispP'+probe).innerHTML = "Description Not Set";
+						document.getElementById('probe'+probe+'Desc').innerHTML = "";
+					}
+					document.getElementById('probe'+probe+'Target').innerHTML = currentData['probe'+probe+'Target'].toFixed(1);
+					document.getElementById('probe'+probe+'TargetFP').innerHTML = currentData['probe'+probe+'Target'].toFixed(1);
+					if(currentData['probe'+probe+'Fault'] == true){
+						document.getElementById('probe'+probe+'Fault').style.visibility = "visible";
+						document.getElementById('probe'+probe+'FaultDesc').innerHTML = max31856fault(currentData['probe1FaultCode']);
+						document.getElementById('probe'+probe+'FaultFP').style.visibility = "visible";
+						document.getElementById('probe'+probe+'FaultDescFP').innerHTML = max31856fault(currentData['probe1FaultCode']);
+					}
+					else{
+						document.getElementById('probe'+probe+'Fault').style.visibility = "hidden";
+						document.getElementById('probe'+probe+'FaultDesc').innerHTML = "";
+						document.getElementById('probe'+probe+'FaultFP').style.visibility = "hidden";
+						document.getElementById('probe'+probe+'FaultDescFP').innerHTML = "";
+					}
+					if(currentData['probeTgtAlm'+probe]) {
+						document.getElementById('probeTgtAlm'+probe).checked = true;
+						document.getElementById('probeTgtAlmI'+probe).style.visibility = "visible";
+					}
+					else{
+						document.getElementById('probeTgtAlm'+probe).checked = false;
+						document.getElementById('probeTgtAlmI'+probe).style.visibility = "hidden";
+					}
+					if(currentData['probeTgtAck'+probe]) {
+						document.getElementById('probeTgtAck'+probe).checked = true;
+					}
+					else document.getElementById('probeTgtAck'+probe).checked = false;
+					if(currentData['probeTgtAct'+probe]) {
+						document.getElementById('probeTgtActP'+probe).style.display = "block";
+						document.getElementById('probeTgtActFP'+probe).style.display = "block";
+						if(!currentData['probeTgtAck'+probe]) document.getElementById('card'+probe).classList.add('cardAlarm');
+						else document.getElementById('card'+probe).classList.remove('cardAlarm');
+					}
+					else{
+						document.getElementById('probeTgtActP'+probe).style.display = "none";
+						document.getElementById('probeTgtActFP'+probe).style.display = "none";
+						document.getElementById('card'+probe).classList.remove('cardAlarm');
+					}
+					if(currentData['probe'+probe+'Deviation']){
+						document.getElementById('probe'+probe+'Deviation').innerHTML = currentData['probe'+probe+'Deviation'].toFixed(3);
+					}
+				}
+
+				
+				if('targetMode' in currentData && currentData['targetMode']){
+					document.getElementById('autoBtmFp').classList.add('btnClicked');
+					document.getElementById('manBtmFp').classList.remove('btnClicked');
+				}
+				else{
+					document.getElementById('autoBtmFp').classList.remove('btnClicked');
+					document.getElementById('manBtmFp').classList.add('btnClicked');
+				}
+				if('mode' in currentData && currentData['mode']){
+					document.getElementById('mode').innerHTML = "AUTO";
+					document.getElementById('mode').classList.remove('modeAbnormal');
+					document.getElementById('modeFp').innerHTML = "AUTO";
+					document.getElementById('modeFp').classList.remove('modeAbnormal');
+				}
+				else{
+					document.getElementById('mode').innerHTML = "MANUAL";
+					document.getElementById('mode').classList.add('modeAbnormal');
+					document.getElementById('modeFp').innerHTML = "MANUAL";
+					document.getElementById('modeFp').classList.add('modeAbnormal');
+				}
+				if(currentData['pitTempFault'] == true){
+					document.getElementById('pitTempFault').style.visibility = "visible";
+					document.getElementById('pitTempFaultDesc').innerHTML = max31856fault(currentData['pitTempFaultCode']);
+					document.getElementById('pitTempFaultFp').style.visibility = "visible";
+					document.getElementById('pitTempFaultDescFp').innerHTML = max31856fault(currentData['pitTempFaultCode']);
+				}
+				else{
+					document.getElementById('pitTempFault').style.visibility = "hidden";
+					document.getElementById('pitTempFaultDesc').innerHTML = "";
+					document.getElementById('pitTempFaultFp').style.visibility = "hidden";
+					document.getElementById('pitTempFaultDescFp').innerHTML = "";
+				}
+
+				
+				var timeDifference = 1000;
+				var maxChartElements = 600;
+				var minChartElements = 500;
+
+				if(updateChartInterval >= 5){
+					config.data.labels.push(currentData['timestamp'] * 1000);
+					config.data.datasets[0].data.push(currentData['pitTemp']);
+					config.data.datasets[1].data.push(currentData['probe1']);
+					config.data.datasets[2].data.push(currentData['probe2']);
+					config.data.datasets[3].data.push(currentData['probe3']);
+					config.data.datasets[4].data.push(currentData['setpoint']);
+					config.data.datasets[5].data.push(currentData['output']);
+					if(config.data.labels.length > maxChartElements){
+						while(config.data.labels.length > minChartElements){
+							for(var i=1; i<config.data.labels.length; i++){
+								if(config.data.labels[i] - config.data.labels[i-1] <= timeDifference){
+									removeElement(i);
+								}
+							}
+							timeDifference = timeDifference * 2;
+						}
+					}
+					window.myLine.update();
+					updateChartInterval = 0;
+				}
+				else updateChartInterval++;
+			}
+			else if(('config' in currentData) && (currentData['config'] == true)){
+				console.log('Config Data Recieved');
+				document.getElementById("lidOpenDetect").checked = currentData['lidOpenDetect'];
+				document.getElementById("pidTuneCVP").innerHTML = currentData['pidTuneP'].toFixed(3);
+				document.getElementById("pidTuneCVI").innerHTML = currentData['pidTuneI'].toFixed(3);
+				document.getElementById("pidTuneCVD").innerHTML = currentData['pidTuneD'].toFixed(3);
+				for(var probe=0; probe<=3; probe++){
+					document.getElementById('filterTimeCV'+probe).innerHTML = currentData['filterTime'+probe].toFixed(2);
+				}
+				document.getElementById("wifiClient").checked = currentData['wifiClient'];
+				document.getElementById("clientSSID").value = currentData['clientSSID'];
+				document.getElementById("clientPWD").value = currentData['clientPWD'];
+				document.getElementById("wifiAP").checked = currentData['wifiAP'];
+				document.getElementById("apSSID").value = currentData['apSSID'];
+				document.getElementById("apPWD").value = currentData['apPWD'];
+				document.getElementById("servoIn0").value = currentData['servoIn0'];
+				document.getElementById("servoIn100").value = currentData['servoIn100'];
+				document.getElementById("servoOut0").value = currentData['servoOut0'];
+				document.getElementById("servoOut100").value = currentData['servoOut100'];
+				document.getElementById("fanIn0").value = currentData['fanIn0'];
+				document.getElementById("fanIn100").value = currentData['fanIn100'];
+				document.getElementById("fanOut0").value = currentData['fanOut0'];
+				document.getElementById("fanOut100").value = currentData['fanOut100'];
+			}
+			else if(('history' in currentData) && (currentData['history'] == true)){
+				
+				if(config.data.labels.length < 20){
+					console.log("Loading History");
+					config.data.labels = currentData.timestamp.map(function(x) { return x * 1000 } );
+					config.data.datasets[0].data = currentData.probe0;
+					config.data.datasets[1].data = currentData.probe1;
+					config.data.datasets[2].data = currentData.probe2;
+					config.data.datasets[3].data = currentData.probe3;
+					config.data.datasets[4].data = currentData.setpoint;
+					config.data.datasets[5].data = currentData.output;
+				}
+			}
+		}
+		function max31856fault(fault){
+			if (fault == 0xff) return "Thermocouple Chip Error";
+			else if(fault & 0x01) return "Open Circut";
+			else if(fault & 0x02) return "Short Circut";
+			else if(fault & 0xfc) return "Out of Range";
+			else return "Unknown Fault";
+		}
+
+		var config = {
+			type: 'line',
+			data: {
+				labels: [],
+				datasets: [{
+					label: 'Pit Temperature',
+					backgroundColor: '#ff6384',
+					borderColor: '#ff6384',
+					data: [],
+					fill: false,
+					radius: 2,
+				}, {
+					label: 'Probe 1',
+					fill: false,
+					backgroundColor: '#bae4bc',
+					borderColor: '#bae4bc',
+					data: [],
+				}, {
+					label: 'Probe 2',
+					fill: false,
+					backgroundColor: '#7bccc4',
+					borderColor: '#7bccc4',
+					data: [],
+				}, {
+					label: 'Probe 3',
+					fill: false,
+					backgroundColor: '#2b8cbe',
+					borderColor: "#2b8cbe",
+					data: [],
+				}, {
+					label: 'setpoint',
+					fill: false,
+					backgroundColor: '#9970ab',
+					borderColor: '#9970ab',
+					data: [],
+				}, {
+					label: 'output',
+					fill: false,
+					backgroundColor: '#999999',
+					borderColor: '#999999',
+					data: [],
+				},  ]
+			},
+			options: {
+				responsive: true,
+				tooltips: {
+					mode: 'index',
+					intersect: true,
+				},
+				hover: {
+					mode: 'point',
+					intersect: true
+				},
+				scales: {
+					xAxes: [{
+						type: 'time',
+						time: {
+							//unit: 'minute',
+							//parser: 'X',
+							displayFormats: {
+								millisecond: 'HH:mm:ss.SSS',
+								second: 'HH:mm:ss',
+								minute: 'HH:mm',
+								hour: 'HH'
+							}
+						},
+						distribution: 'linear',
+						display: true,
+						scaleLabel: {
+							display: true,
+							labelString: 'Time'
+						}
+					}],
+					yAxes: [{
+						display: true,
+						scaleLabel: {
+							display: true,
+							labelString: 'Value'
+						}
+					}]
+				}
+			}
+		};
+
+		window.onload = function() {
+
+			var ctx = document.getElementById('canvas').getContext('2d');
+			window.myLine = new Chart(ctx, config);
+			initWebSocket();
+		};
+
+		function removeElement(element){
+			config.data.labels.splice(element, 1); // remove the label first
+			config.data.datasets.forEach(function(dataset) {
+				dataset.data.splice(element, 1);
+			});
+			window.myLine.update();
+		}
+		function openPIDFaceplate() {
+			document.getElementById("pidfaceplate").style.display = "block";
+			document.getElementById("setpointFpEntry").style.display = "none";
+			document.getElementById("setpointFpDisp").style.display = "block";
+			document.getElementById("outputFpEntry").style.display = "none";
+			document.getElementById("outputFpDisp").style.display = "block";
+		}
+		function openPid(term){
+			document.getElementById("pidDisp"+term).style.display = "none";
+			document.getElementById("pidEntry"+term).style.display = "block";
+			document.getElementById("pidTune"+ term).value = document.getElementById("pidTuneCV"+term).innerHTML;
+		}
+		function setpid(term){
+			document.getElementById("pidDisp"+term).style.display = "block";
+			document.getElementById("pidEntry"+term).style.display = "none";
+			websocket.send('{"pidTune'+term+'":'+ document.getElementById("pidTune"+ term).value +'}');
+		}
+		function openProbeFP(probe) {
+			document.getElementById("probe"+probe+"faceplate").style.display = "block";
+			document.getElementById("SpFpDispP" + probe).style.display = "block";
+			document.getElementById("SpFpEntryP" + probe).style.display = "none";
+			document.getElementById("DescFpDispP" + probe).style.display = "block";
+			document.getElementById("DescFpEntryP" + probe).style.display = "none"
+		}
+		function openProbeSP(probe){
+			document.getElementById("SpFpDispP" + probe).style.display = "none";
+			document.getElementById("SpFpEntryP" + probe).style.display = "block";
+			document.getElementById("SpFpInputP"+ probe).value = document.getElementById("probe"+probe+"TargetFP").innerHTML;
+		}
+		function setFpSpProbe(probe){
+			document.getElementById("SpFpDispP" + probe).style.display = "block";
+			document.getElementById("SpFpEntryP" + probe).style.display = "none";
+			websocket.send('{"probe'+probe+'Target":'+ document.getElementById("SpFpInputP"+ probe).value +'}');
+		}
+		function openProbeDesc(probe){
+			document.getElementById("DescFpDispP" + probe).style.display = "none";
+			document.getElementById("DescFpEntryP" + probe).style.display = "block";
+			document.getElementById("DescFpInputP"+ probe).value = document.getElementById("DescFpDispP"+probe).innerHTML;
+		}
+		function setFpDescProbe(probe){
+			document.getElementById("DescFpDispP" + probe).style.display = "block";
+			document.getElementById("DescFpEntryP" + probe).style.display = "none";
+			websocket.send('{"probe'+probe+'Desc":"'+ document.getElementById("DescFpInputP"+ probe).value +'"}');
+		}
+		function openFilterTime(probe){
+			document.getElementById("filtTimeDisp" + probe).style.display = "none";
+			document.getElementById("filtTimeEntry" + probe).style.display = "block";
+			document.getElementById("filterTime"+ probe).value = document.getElementById("filterTimeCV"+probe).innerHTML;
+		}
+		function setFilterTime(probe){
+			document.getElementById("filtTimeDisp" + probe).style.display = "block";
+			document.getElementById("filtTimeEntry" + probe).style.display = "none";
+			websocket.send('{"filterTime'+probe+'":'+ document.getElementById('filterTime'+ probe).value +'}');
+		}
+		function saveLimits(setting){
+			websocket.send('{"'+setting+'In0":'+
+			document.getElementById(setting+"In0").value +
+			',"'+setting+'In100":'+
+			document.getElementById(setting+"In100").value +
+			',"'+setting+'Out0":'+
+			document.getElementById(setting+"Out0").value +
+			',"'+setting+'Out100":'+
+			document.getElementById(setting+"Out100").value +
+			'}');
+		}
+		function writeCheckbox(checkboxElem){
+			if (checkboxElem.checked) websocket.send('{"'+checkboxElem.id+'":1}');
+			else websocket.send('{"'+checkboxElem.id+'":0}');
+		}
+		function closeForm() {
+			document.getElementById("pidfaceplate").style.display = "none";
+			document.getElementById("probe1faceplate").style.display = "none";
+			document.getElementById("probe2faceplate").style.display = "none";
+			document.getElementById("probe3faceplate").style.display = "none";
+		}
+		function setModeMan() {
+			websocket.send('{"targetMode":"MANUAL"}');
+		}
+		function setModeAuto() {
+			websocket.send('{"targetMode":"AUTOMATIC"}');
+		}
+		function openFpSp() {
+			document.getElementById("setpointFpEntry").style.display = "block";
+			document.getElementById("setpointFpDisp").style.display = "none";
+			document.getElementById("setpointFpInput").value = document.getElementById('setpoint').innerHTML;
+		}
+		function setFpSetpoint(){
+			document.getElementById("setpointFpEntry").style.display = "none";
+			document.getElementById("setpointFpDisp").style.display = "block";
+			websocket.send('{"setpoint":'+ document.getElementById("setpointFpInput").value +'}');
+			document.getElementById('setpoint').innerHTML = document.getElementById("setpointFpInput").value;
+			document.getElementById('setpointFp').innerHTML = document.getElementById("setpointFpInput").value;
+		}
+		function openFpOut() {
+			if(!currentData['mode']){
+				document.getElementById("outputFpEntry").style.display = "block";
+				document.getElementById("outputFpDisp").style.display = "none";
+				document.getElementById("outputFpInput").value = document.getElementById('output').innerHTML;
+			}
+			else{
+				alert('Switch to Manual to set Output');
+			}
+		}
+		function setFpOutput(){
+			document.getElementById("outputFpEntry").style.display = "none";
+			document.getElementById("outputFpDisp").style.display = "block";
+			websocket.send('{"output":'+ document.getElementById("outputFpInput").value +'}');
+			document.getElementById('output').innerHTML = document.getElementById("outputFpInput").value;
+			document.getElementById('outputFp').innerHTML = document.getElementById("outputFpInput").value;
+		}
+		function clearHist(){
+			if(confirm("Are you sure you want to clear all History?") == true){
+				websocket.send('{"history":true,"clearHistory":true}');
+			}
+		}
+		function saveWifi(){
+			websocket.send('{"wifi":true'+
+			',"wifiClient":'+
+			document.getElementById("wifiClient").checked +
+			',"clientSSID":"'+
+			document.getElementById("clientSSID").value +
+			'","clientPWD":"'+
+			document.getElementById("clientPWD").value +
+			
+			'","wifiAP":'+
+			document.getElementById("wifiAP").checked +
+			',"apSSID":"'+
+			document.getElementById("apSSID").value +
+			'","apPWD":"'+
+			document.getElementById("apPWD").value +
+			'"}');
+		}
+	</script>
+</body>
+
+</html>
