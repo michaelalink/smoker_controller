@@ -27,8 +27,8 @@ bool configChange = false;
 // WIFI
 #include <WiFi.h>
 #include <DNSServer.h>
-#define WIFI_NETWORK "No Wireless Networks Available"
-#define WIFI_PASSWORD "Thinking1"
+#define WIFI_NETWORK "WIFI NETWORK NAME"
+#define WIFI_PASSWORD "WIFI PASSWORD"
 #define WIFI_TIMEOUT_MS 30000 // 30 second WiFi connection timeout
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
